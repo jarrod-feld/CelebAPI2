@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: celebrity-face-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn celebrityanalysis:app --host 0.0.0.0 --port $PORT
+    plan: free
+    pythonVersion: 3.9
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: API_KEY
+        sync: false

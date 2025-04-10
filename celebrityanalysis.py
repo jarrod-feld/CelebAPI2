@@ -2,21 +2,34 @@ import os
 import io
 import numpy as np
 import face_recognition
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Security, Depends
+from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
 from typing import List
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-# ...existing code for environment and client configuration...
+# Load environment variables
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-    raise Exception("Missing SUPABASE_URL or SUPABASE_ANON_KEY in environment variables.")
+API_KEY = os.getenv("API_KEY")
+if not SUPABASE_URL or not SUPABASE_ANON_KEY or not API_KEY:
+    raise Exception("Missing required environment variables")
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 app = FastAPI()
+
+api_key_header = APIKeyHeader(name="X-API-Key")
+
+async def get_api_key(api_key: str = Security(api_key_header)):
+    if api_key != API_KEY:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key"
+        )
+    return api_key
 
 class CelebrityResult(BaseModel):
     rank: int
@@ -50,7 +63,11 @@ async def get_celebrity_chunk(offset: int, limit: int = 1000):
         raise HTTPException(status_code=500, detail=f"Error fetching celebrity data: {str(e)}")
 
 @app.post("/analyze", response_model=AnalysisResponse)
-async def analyze_face(file: UploadFile = File(...), num_results: int = 8):
+async def analyze_face(
+    file: UploadFile = File(...),
+    num_results: int = 8,
+    api_key: str = Depends(get_api_key)
+):
     # Validate file is an image
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Invalid file type. Only image files are accepted.")
