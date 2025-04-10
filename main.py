@@ -102,13 +102,42 @@ def upload_image_to_supabase(image_base64, name):
     public_url_response = supabase.storage.from_(SUPABASE_BUCKET).get_public_url(filename)
     return public_url_response
 
+def save_embeddings_to_parquet(embeddings_data, output_file='celebrity_embeddings.parquet'):
+    """Save embeddings and metadata to parquet file"""
+    df = pd.DataFrame(embeddings_data)
+    df.to_parquet(output_file, index=False)
+    print(f"Saved {len(df)} embeddings to {output_file}")
+
 def main():
     print("Reading training parquet file...")
     df = pd.read_parquet(TRAIN_PARQUET_FILE)
     print(f"Loaded {len(df)} records from train file.")
     
+    # Store embeddings while processing
+    embeddings_data = []
+    
     for index, record in df.iterrows():
+        # Process and insert to Supabase
         process_and_insert_row(record, index)
+        
+        # Store embedding data
+        try:
+            img_data = record["image"]
+            label = record["label"]
+            image = load_image(img_data)
+            face_locations = face_recognition.face_locations(image)
+            if face_locations:
+                face_encodings = face_recognition.face_encodings(image, face_locations)
+                if face_encodings:
+                    embeddings_data.append({
+                        'name': label,
+                        'embedding': face_encodings[0].tolist()
+                    })
+        except Exception as e:
+            print(f"Error storing embedding for record {index}: {e}")
+    
+    # Save embeddings to parquet file
+    save_embeddings_to_parquet(embeddings_data)
     
     print("Processing test image (test.png)...")
     test_image = np.array(Image.open("test.png"))
